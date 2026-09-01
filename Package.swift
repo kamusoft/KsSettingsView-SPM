@@ -1,0 +1,106 @@
+// swift-tools-version: 5.10
+// KsSettingsView iOS Native — モノレポのビルド入口
+//
+// 本パッケージは KsSettingsView iOS Native ライブラリ群（Core / UI / SwiftUI ラッパなど）の
+// SwiftPM ルートとして配置される。
+
+import PackageDescription
+
+let package = Package(
+    name: "KsSettingsView",
+    platforms: [
+        // ライブラリ自体の対象プラットフォームは iOS 16+。
+        // `KsSettingsViewUI` / `KsSettingsViewSwiftUI` は `UIHostingConfiguration` を使うため
+        // iOS 16 以上が必須。
+        .iOS(.v16),
+        // macOS 指定はテスト実行（swift test は macOS ホスト）のためのみ。
+        // UI 系ターゲットは UIKit 依存のため、macOS では `#if canImport(UIKit)` でビルド対象から
+        // 自然に除外される（テストコンパイルは可能、実行時は iOS シミュレータで行うのが原則）。
+        .macOS(.v13)
+    ],
+    products: [
+        // 公開 product は umbrella 1 本のみ。これ 1 つを依存に追加すれば、
+        // 用途に応じて `KsSettingsViewCore` / `KsSettingsViewUI` / `KsSettingsViewSwiftUI` の
+        // いずれの module も import できる。
+        //
+        // - Core: SettingsRoot / Section / Cell 抽象のドメインモデル層（Theme / CellStyle は UI 層）
+        // - UI: UIKit ベースの UI 基盤（KsSettingsViewController、Cell レジストリ、Renderer、
+        //   Theme / CellStyle 等）
+        // - SwiftUI: SwiftUI ラッパ + DSL（KsSettingsView, SettingsRootBuilder 等）
+        .library(
+            name: "KsSettingsView",
+            targets: [
+                "KsSettingsViewCore",
+                "KsSettingsViewUI",
+                "KsSettingsViewSwiftUI"
+            ]
+        )
+        // Bridge (`KsSettingsViewBridge`) は product として公開しない。
+        // 利用経路は `ios/binding/` の Xcode project が生成する xcframework 経由のみであり、
+        // 同名の product を公開すると自動生成 scheme が Xcode project の同名 target と衝突して、
+        // `xcodebuild -scheme KsSettingsViewBridge` の解決先が非決定的になる。
+    ],
+    dependencies: [],
+    targets: [
+        // テスト支援ターゲット: 3 つの UI 系テストターゲットが共有する待機・レイアウト実行ヘルパ。
+        // product として公開せず、テストターゲットからのみ依存される。XCTest を直接リンクし、
+        // deadline 超過時の失敗をこのターゲット内から発火する。
+        .target(
+            name: "KsSettingsViewTestSupport",
+            path: "Tests/KsSettingsViewTestSupport"
+        ),
+        // テスト支援ターゲット自身のテスト
+        .testTarget(
+            name: "KsSettingsViewTestSupportTests",
+            dependencies: ["KsSettingsViewTestSupport"],
+            path: "Tests/KsSettingsViewTestSupportTests"
+        ),
+        // Core ターゲット: UIKit に依存しない純粋データモデル
+        .target(
+            name: "KsSettingsViewCore",
+            path: "Sources/KsSettingsViewCore"
+        ),
+        // Core テストターゲット: XCTest
+        .testTarget(
+            name: "KsSettingsViewCoreTests",
+            dependencies: ["KsSettingsViewCore"],
+            path: "Tests/KsSettingsViewCoreTests"
+        ),
+        // UI ターゲット: UIKit ベースの ViewController / Cell 描画層
+        .target(
+            name: "KsSettingsViewUI",
+            dependencies: ["KsSettingsViewCore"],
+            path: "Sources/KsSettingsViewUI"
+        ),
+        // UI テストターゲット
+        .testTarget(
+            name: "KsSettingsViewUITests",
+            dependencies: ["KsSettingsViewUI", "KsSettingsViewCore", "KsSettingsViewTestSupport"],
+            path: "Tests/KsSettingsViewUITests"
+        ),
+        // SwiftUI ターゲット: UIViewControllerRepresentable + DSL
+        .target(
+            name: "KsSettingsViewSwiftUI",
+            dependencies: ["KsSettingsViewUI", "KsSettingsViewCore"],
+            path: "Sources/KsSettingsViewSwiftUI"
+        ),
+        // SwiftUI テストターゲット
+        .testTarget(
+            name: "KsSettingsViewSwiftUITests",
+            dependencies: ["KsSettingsViewSwiftUI", "KsSettingsViewUI", "KsSettingsViewCore", "KsSettingsViewTestSupport"],
+            path: "Tests/KsSettingsViewSwiftUITests"
+        ),
+        // Bridge ターゲット: `@objc` 互換 DTO と内部所有 Store を持つ interop 境界
+        .target(
+            name: "KsSettingsViewBridge",
+            dependencies: ["KsSettingsViewUI", "KsSettingsViewCore"],
+            path: "Sources/KsSettingsViewBridge"
+        ),
+        // Bridge テストターゲット
+        .testTarget(
+            name: "KsSettingsViewBridgeTests",
+            dependencies: ["KsSettingsViewBridge", "KsSettingsViewUI", "KsSettingsViewCore", "KsSettingsViewTestSupport"],
+            path: "Tests/KsSettingsViewBridgeTests"
+        )
+    ]
+)
